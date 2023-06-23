@@ -88,3 +88,170 @@ https://github.com/facebookresearch/FiD
 ![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/3120174a-d28a-42b9-8b70-757b7c5cf996)
 
 
+## FiD-KD ICLR 2021 Facebook
+
+[Distilling Knowledge from Reader to Retriever for Question Answering](https://zhuanlan.zhihu.com/p/576171199) 
+
+1. **动机**：fid以及之前的REALM、RAG都没有对检索到的结果进行监督。作者注意到fid将所有encoding拼接后，会进行cross attention，认为其中的attention的值的大小是一个很好的监督信号，可以根据此对检索到的文章进行打分（**因为一个文本段中的token被关注的越多，就越可能是回答该问题的有效参考段落**）。
+
+2. **做法**：使用sequence-to-sequence模型作为阅读器，并使用decoder对输入文档的注意得分作为标签来训练检索器
+
+   - **<u>（1）怎么计算检索器标签</u>**：给定问题q和对应的支持文档集 $D_q=(p_k)_{1<=k<=n}$ ，取decoder中**每一层**的**每一个注意力头**的**第零个token**的**query向量Q，**与**encoder拼接序列**上的**某一个检索段落** $p_k$对应的**每一个token**的**key向量K，**计算**Q与K**之间的点积分数，对所有分数取平均，作为检索段落$p_k$的注意力得分$G_{q,p_k}$ 。
+
+   - **<u>（2）怎么蒸馏cross-attention分数到bi-encoder</u>**：最小化retriever打分和cross-attention score分布之间的kl散度：
+
+    ![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/e4f9e8db-d468-4e4b-8ce4-fa894b1c275e)
+
+   - **<u>（3）怎么迭代训练</u>**：首先，对于每个q，会得到一个初始的support documents $D_q^0$，采样迭代过程，每次迭代包含下面4个步骤。
+
+     1. **使用每个q和其对应的$D_q^0$ 训练生成器  G**，注意，在每一次新的训练迭代中，这一步的生成器都从T5基础上重新初始化，防止被前轮不好的检索结果带偏。
+     2. 使用学习好的生成器 G，**获取聚合后的注意力分数 $(G_{q,p})_{q \in Q, p \in D_q^0}$**
+     3. 用得到的注意力分数，通过kl散度的方式，**训练检索器 R**
+     4. 用学习好的检索器 R 重新**为每个q召回对应的support documents** 
+
+   - 注意，迭代训练中的初始support docs非常重要，可以使用 bm25 或者事先训练好的dpr
+
+## RETRO 2022 Deepmind
+
+[Improving Language Models by Retrieving from Trillions of Tokens](http://jalammar.github.io/illustrated-retrieval-transformer/) 
+
+
+几个takeaway是：1）不训练检索器就很好使，RETRO直接用冻结的BERT作为检索器，效果也很好。2）cross attention固然好用，像RETRO这样设计新的深度融合可能会更好。
+
+**RETRO相比REALM，采用的是chunks维度的检索**。
+
+1. **动机**：通过检索增强的方式增强小的语言模型，从而达到和大规模语言模型相媲美的性能。
+
+   - 预测下一个单词——本质上是在句子末尾填空。
+
+   - 认为**将language information和world knowledge分开很重要**（填空需要的东西，有的仅仅依靠于语言信息就可以填出来），用语言模型编码language information很合理，但是对于factual和world-knowledge information来说效率很低。 ===> 在LM中引入retrieval method
+
+    ![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/4b795796-b823-4b63-841b-a3d7877d14c7)
+
+
+2. **retrieval database**：k-v存储，k是bert编码的sent emb，v有2个部分：（1）neighbour，计算出key的文本；（2）completion，原始文本的续写。
+
+   ![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/3cf2a83a-bc6e-42fe-8178-fc2a1aaa2f69)
+
+
+3. **The Database Lookup**：
+
+   ![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/19823af8-016c-4546-8898-3299cb425011)
+
+
+4. **RETRO Architecture**：
+
+   - **encoder**：检索到的neighbors，作为输入，编码得到keys和values，送往decoder。
+   - **decoder包含两类**：**Standard decoder block** (ATTN + FFNN)；**RETRO decoder block** (ATTN + Chunked cross attention (CCA) + FFNN)；从第9个块开始，每3个块遇到一个retro decoder block，所以第 9、12、15…32 层是 RETRO 块。
+
+   ![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/7cb47da3-bfe8-4673-acdd-fc207048f439)
+
+
+   - decoder的流程
+     - **Decoder blocks**：It applies self-attention on the prompt token (causally, so only attending to previous tokens), then passes through a FFNN layer.
+     - **RETRO decoder**：合并检索到的信息
+
+5. overall
+
+   - 每个训练 sequence 先被切分为 chunks, 分别用它们在database中检索到的k近邻增强。
+   - Chunked cross attention (CCA) 可以看下面的示意图，其中，原本长度为n的序列，被切成l个块，每个块m个词。$H_u^+$  保留了块 $C_u$ 中的最后一个token的emb和 下一个块 $C_{u+1}$  中的前m-1个token emb。
+   - 注，块 $C_u$ 中的last token是第一个能访问该块检索到的内容 $E_u$ 的token，保证了likelihood中的autoregressive性。
+   - 在 $H_u^+$ 和 $E_u$ （块$C_u$ 检索回来的embs）之间计算cross- attention，将得到的emb再替换回去。
+
+![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/2f88a4f8-fcc3-45cc-841c-3d6b78d972b5)
+
+![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/78489799-e187-4c7e-8a9e-09096f565f95)
+
+
+**likelihood 的定义也是 autoregressive 的** : the probability of the 𝑖-th token of the 𝑢-th chunk $x_{(u-1)m+i}$ , only depends on previously seen tokens  $(x_j)_{j<(u-1)m+i}$ and on the data retrieved from the previous chunks $(RET_D(C_{u'}))_{u'<u}$
+
+
+## REPLUG 2023 meta
+
+[Retrieval-Augmented Black-Box Language Models, 2023](https://blog.csdn.net/qq_52852138/article/details/130775281) 
+
+1. 动机：
+
+   - 将语言模型视作黑盒，只需要将检索到的文档拼到原有输入前面，不需要更新大模型参数。在该架构中，通过更新检索器来提升性能。
+
+2. REPLUG (inference) 做法：
+
+   - 给定查询x，先用检索器检索出top-k个文档集合 D'
+   - 将每个文档和x拼接，并行送给大模型
+   - 预测下一个词y的概率由加权平均决定，$\lambda(d,x)$ 是检索器打分在D‘上softmax后的结果。 
+
+   $$
+   p(y|x,D')=\sum_{d\in D'} p(y|d \circ x) \cdot \lambda(d,x)
+   $$
+
+3. REPLUG LSR: 用语言模型反馈的监督信号，调整检索器。（一个文档如果对大模型越有帮助，越应该被检索回来）
+
+   - 给定q，还有检索到的top-k个文档，对2个分布计算kl散度。最小化损失函数来优化检索器，LM保持不动。
+   - 第一个分布：检索器对这k个文档的打分，过softmax
+   - 第二个分布，生成器对这k个文档的打分，即，输入d和x，生成ground truth y的概率，同样过softmax
+   - 注：因为检索器参数在训练过程中更新，参数更新后document embedding会变化，因此**每隔T步就重新算一次document embedding**，并重复上述过程。
+
+## inpairs sigir 2022
+
+[Data Augmentation for Information Retrieval using Large Language Models](https://arxiv.org/pdf/2202.05144.pdf) 
+
+1. 方法：
+
+   - 对于一个文档，前面加3组 q-d pair 构建instruction，然后用LLM生成query，以及对应的生成概率。（无论输入文档d如何，无论是哪个数据集的，前缀3组 q-d pair始终相同），提供了两种模板。
+
+   - 基于这个方法，就可以从文档集合中随机采样一些文档，对每个文档生成一个对应的query，最终构成训练的正样本。用于微调精排模型。
+   - 不执行任何预训练来使模型适应目标语料库
+
+   
+![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/34bf1ece-0e17-461a-afb6-65135a9554f3)
+
+![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/39730649-84b9-44e9-81f3-113cbad93cc6)
+
+
+## PROMPTAGATOR iclr 2023 google
+
+[Few-shot Dense Retrieval From 8 Examples](https://zhuanlan.zhihu.com/p/585269408) 
+
+1. 动机：关注few-shot dense retrieval，设置每个任务只有一个简短的描述和少量的examples，用大语言模型基于prompt进行数据生成，用于检索器训练。
+
+   - 和 Inpairs 的区别：1. prompt 有task描述信息；2. 小的retriever或者ranker也可以达到很好的效果
+
+2. 做法：
+
+   - 【prompt-base <u>**query generation**</u>】把已有的q-d对作为prompt，给不同的d，让大模型生成对应的q，获得更多的q-d对数据。
+   - 【consistency filtering using only generated data 】用生成的数据训练初始的检索器，而后对生成的数据进行过滤：给定生成的(q,d)对，用刚刚训练好的检索器对q进行检索，如果对应的d出现是其top1，则保留该生成的(q,d) pair
+   - 【few-shot promptagator retriever】分为pre-train和fine-tune
+     - pre-train：用T5的encoder作为dual-encoder的初始化，在c4数据上预训练，预训练方法参见contriever（同一个文档的两个随机的段落作为正样本对）。
+     - fine-tune：在生成的q-d数据上微调，同样使用in-batch random negatives。在训练了几个epoch后，对生成数据进行过滤。用过滤后的数据继续微调dual-encoder。
+
+
+## Hypothetical Document Embedding (HyDE) 2022 cmu
+
+Precise Zero-Shot Dense Retrieval without Relevance Labels
+
+- 给定一个query，首先用zero-shot的方式指示InstructGPT生成一个能回答该query的假设文档，使用无监督对比学习Contriever把doc编码成embedding vector，然后从真实的语料库中找到假设文档最近邻相似的文档。
+- 把dense retrieval任务分解为了两个任务，生成任务 + doc-doc相似性比较任务。NLG and NLU ，替换掉了显式的相关性建模
+
+![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/c56336cc-1f65-43b7-9c7a-dba87dca78ed)
+
+
+## GenRead (generate-then-read) iclr 2023 
+
+[Generate rather than Retrieve: Large Language Models are Strong Context Generators](https://openreview.net/pdf?id=fB0hRu9GZUS) 
+
+![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/006eabad-fe65-4fee-a70f-8c713e0b44a0)
+
+
+1. **zero-shot做法**：no training data – neither questions nor contextual documents.
+   - **Step1 generate**：用instructGPT，对给定的question生成documents
+   - **Step2 read**：使用生成的句子d和查询一起作为输入，送给大模型产生answer
+2. **supervised 做法：**保证了多样性～
+   - **step 1 generate one initial document per question**：问题库Q（q1,q2...），对每个q 用大模型生成或者使用 BM25 从维基百科检索出一个doc，得到q-d pair set $\{q_i, d_i\}_{i=1}^{|Q|}$
+   - **step 2 encode each document，do k-means clustering**：使用大模型（eg，GPT3）对每个q-d pair编码。而后对|Q|个编码得到的向量进行k-means聚到k类，k是一个变量。
+   - **step 3 sample and generate k documenrs**：从每个类中采样n个q-d pair， n是一个超参数。每个类下的n个q-d pair，作为in-context demonstrations，对于新输入的query，分别和不同类下的n个q-d对组成输入，让大模型为query生成不同类别下的doc。
+   - 使用类似fid的方式，把q和生成的不同类别的doc，送给decoder，得到answer。
+
+![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/f4bad59c-e26c-459e-94aa-ae023fa1297c)
+
+
+
