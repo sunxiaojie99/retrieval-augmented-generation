@@ -6,6 +6,20 @@
 
 [检索、提示：检索增强的（Retrieval Augmented）自然语言处理](https://zhuanlan.zhihu.com/p/470784563) 
 
+- [retrieval-augmented-generation](#retrieval-augmented-generation)
+  - [kNN-LMs ICLR 2020](#knn-lms-iclr-2020)
+  - [**REALM** 增强开始 ICML2020 google](#realm-增强开始-icml2020-google)
+  - [RAG，通用增强模型 NeurIPS 2020](#rag通用增强模型-neurips-2020)
+  - [fid EACL2021 简单高效的Generator改进](#fid-eacl2021-简单高效的generator改进)
+  - [FiD-KD ICLR 2021 Facebook](#fid-kd-iclr-2021-facebook)
+  - [RETRO 2022 Deepmind](#retro-2022-deepmind)
+  - [REPLUG 2023 meta](#replug-2023-meta)
+  - [inpairs sigir 2022](#inpairs-sigir-2022)
+  - [PROMPTAGATOR iclr 2023 google](#promptagator-iclr-2023-google)
+  - [Hypothetical Document Embedding (HyDE) 2022 cmu](#hypothetical-document-embedding-hyde-2022-cmu)
+  - [GenRead (generate-then-read) iclr 2023](#genread-generate-then-read-iclr-2023)
+
+
 ## kNN-LMs ICLR 2020
 
 Generalization through Memorization: Nearest Neighbor Language Models
