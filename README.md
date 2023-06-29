@@ -8,30 +8,35 @@
 
 - [retrieval-augmented-generation](#retrieval-augmented-generation)
 - [LLM forIR](#llm-forir)
-  - [Generating synthetic queries](#generating-synthetic-queries)
-    - [inpairs sigir 2022](#inpairs-sigir-2022)
-    - [PROMPTAGATOR iclr 2023 google](#promptagator-iclr-2023-google)
-  - [Generating synthetic documents](#generating-synthetic-documents)
-    - [Hypothetical Document Embedding (HyDE) 2022 cmu](#hypothetical-document-embedding-hyde-2022-cmu)
-  - [Generating ranking lists](#generating-ranking-lists)
-  - [Generate rather than Retrieve](#generate-rather-than-retrieve)
-    - [GenRead (generate-then-read) iclr 2023](#genread-generate-then-read-iclr-2023)
+  - [only for IR](#only-for-ir)
+    - [Generating synthetic queries](#generating-synthetic-queries)
+      - [inpairs sigir 2022](#inpairs-sigir-2022)
+      - [PROMPTAGATOR iclr 2023 google](#promptagator-iclr-2023-google)
+    - [Generating synthetic documents](#generating-synthetic-documents)
+      - [Hypothetical Document Embedding (HyDE) 2022 cmu](#hypothetical-document-embedding-hyde-2022-cmu)
+    - [Generating ranking lists](#generating-ranking-lists)
+  - [for IR, for LLM](#for-ir-for-llm)
+    - [consistence](#consistence)
+      - [REPLUG 2023 meta](#replug-2023-meta)
+    - [diversity](#diversity)
+      - [GenRead (generate-then-read) iclr 2023](#genread-generate-then-read-iclr-2023)
 - [IR for LLM](#ir-for-llm)
-  - [generator](#generator)
+  - [generator fusion](#generator-fusion)
     - [fid EACL2021 简单高效的Generator改进](#fid-eacl2021-简单高效的generator改进)
     - [FiD-KD ICLR 2021 Facebook](#fid-kd-iclr-2021-facebook)
   - [inference stage](#inference-stage)
     - [kNN-LMs ICLR 2020](#knn-lms-iclr-2020)
-  - [other](#other)
+  - [retrieve evidence to LLM](#retrieve-evidence-to-llm)
     - [**REALM** 增强开始 ICML2020 google](#realm-增强开始-icml2020-google)
     - [RAG，通用增强模型 NeurIPS 2020](#rag通用增强模型-neurips-2020)
     - [RETRO 2022 Deepmind](#retro-2022-deepmind)
-    - [REPLUG 2023 meta](#replug-2023-meta)
 
 # LLM forIR
-## Generating synthetic queries
 
-### inpairs sigir 2022
+## only for IR
+### Generating synthetic queries
+
+#### inpairs sigir 2022
 
 [Data Augmentation for Information Retrieval using Large Language Models](https://arxiv.org/pdf/2202.05144.pdf) 
 
@@ -43,12 +48,13 @@
    - 不执行任何预训练来使模型适应目标语料库
 
    
-![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/34bf1ece-0e17-461a-afb6-65135a9554f3)
 
-![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/39730649-84b9-44e9-81f3-113cbad93cc6)
+<img src="https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/34bf1ece-0e17-461a-afb6-65135a9554f3" alt="image" style="zoom:50%;" />
+
+<img src="https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/39730649-84b9-44e9-81f3-113cbad93cc6" alt="image" style="zoom:50%;" />
 
 
-### PROMPTAGATOR iclr 2023 google
+#### PROMPTAGATOR iclr 2023 google
 
 [Few-shot Dense Retrieval From 8 Examples](https://zhuanlan.zhihu.com/p/585269408) 
 
@@ -64,22 +70,53 @@
      - pre-train：用T5的encoder作为dual-encoder的初始化，在c4数据上预训练，预训练方法参见contriever（同一个文档的两个随机的段落作为正样本对）。
      - fine-tune：在生成的q-d数据上微调，同样使用in-batch random negatives。在训练了几个epoch后，对生成数据进行过滤。用过滤后的数据继续微调dual-encoder。
      - 
-## Generating synthetic documents
+### Generating synthetic documents
 
-### Hypothetical Document Embedding (HyDE) 2022 cmu
+#### Hypothetical Document Embedding (HyDE) 2022 cmu
 
 Precise Zero-Shot Dense Retrieval without Relevance Labels
 
 - 给定一个query，首先用zero-shot的方式指示InstructGPT生成一个能回答该query的假设文档，使用无监督对比学习Contriever把doc编码成embedding vector，然后从真实的语料库中找到假设文档最近邻相似的文档。
 - 把dense retrieval任务分解为了两个任务，生成任务 + doc-doc相似性比较任务。NLG and NLU ，替换掉了显式的相关性建模
 
-![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/c56336cc-1f65-43b7-9c7a-dba87dca78ed)
+<img src="https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/c56336cc-1f65-43b7-9c7a-dba87dca78ed" alt="image" style="zoom:50%;" />
 
-## Generating ranking lists
+### Generating ranking lists
 
-## Generate rather than Retrieve
 
-### GenRead (generate-then-read) iclr 2023 
+## for IR, for LLM
+
+### consistence
+（1）直接用大模型的embedding做双塔；（2）用大模型的监督信号
+
+#### REPLUG 2023 meta
+
+[Retrieval-Augmented Black-Box Language Models, 2023](https://blog.csdn.net/qq_52852138/article/details/130775281) 
+
+1. 动机：
+
+   - 将语言模型视作黑盒，只需要将检索到的文档拼到原有输入前面，不需要更新大模型参数。在该架构中，通过更新检索器来提升性能。
+
+2. REPLUG (inference) 做法：
+
+   - 给定查询x，先用检索器检索出top-k个文档集合 D'
+   - 将每个文档和x拼接，并行送给大模型
+   - 预测下一个词y的概率由加权平均决定，$\lambda(d,x)$ 是检索器打分在D‘上softmax后的结果。 
+
+   $$
+   p(y|x,D')=\sum_{d\in D'} p(y|d \circ x) \cdot \lambda(d,x)
+   $$
+
+3. REPLUG LSR: 用语言模型反馈的监督信号，调整检索器。（一个文档如果对大模型越有帮助，越应该被检索回来）
+
+   - 给定q，还有检索到的top-k个文档，对2个分布计算kl散度。最小化损失函数来优化检索器，LM保持不动。
+   - 第一个分布：检索器对这k个文档的打分，过softmax
+   - 第二个分布，生成器对这k个文档的打分，即，输入d和x，生成ground truth y的概率，同样过softmax
+   - 注：因为检索器参数在训练过程中更新，参数更新后document embedding会变化，因此**每隔T步就重新算一次document embedding**，并重复上述过程。
+
+### diversity
+
+#### GenRead (generate-then-read) iclr 2023 
 
 [Generate rather than Retrieve: Large Language Models are Strong Context Generators](https://openreview.net/pdf?id=fB0hRu9GZUS) 
 
@@ -100,7 +137,7 @@ Precise Zero-Shot Dense Retrieval without Relevance Labels
 
 # IR for LLM
 
-## generator
+## generator fusion
 
 ### fid EACL2021 简单高效的Generator改进
 
@@ -128,15 +165,18 @@ https://github.com/facebookresearch/FiD
 
    - **<u>（2）怎么蒸馏cross-attention分数到bi-encoder</u>**：最小化retriever打分和cross-attention score分布之间的kl散度：
 
-    ![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/e4f9e8db-d468-4e4b-8ce4-fa894b1c275e)
+    <img src="https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/e4f9e8db-d468-4e4b-8ce4-fa894b1c275e" alt="image" style="zoom:50%;" />
 
+   
+
+   
+   
    - **<u>（3）怎么迭代训练</u>**：首先，对于每个q，会得到一个初始的support documents $D_q^0$，采样迭代过程，每次迭代包含下面4个步骤。
-
      1. **使用每个q和其对应的$D_q^0$ 训练生成器  G**，注意，在每一次新的训练迭代中，这一步的生成器都从T5基础上重新初始化，防止被前轮不好的检索结果带偏。
      2. 使用学习好的生成器 G，**获取聚合后的注意力分数 $(G_{q,p})_{q \in Q, p \in D_q^0}$**
      3. 用得到的注意力分数，通过kl散度的方式，**训练检索器 R**
      4. 用学习好的检索器 R 重新**为每个q召回对应的support documents** 
-
+     
    - 注意，迭代训练中的初始support docs非常重要，可以使用 bm25 或者事先训练好的dpr
 
 ## inference stage
@@ -158,10 +198,9 @@ Generalization through Memorization: Nearest Neighbor Language Models
 4. **问题**：训练集中的每个token都需要自己作为value，其前文作为key，检索的数据规模相当大，虽然用faiss加速，依旧是一个问题。
 
 
-
 <img src="https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/32ec3636-0fa7-4be0-86c8-b7c0ce7ee369" alt="image-20230622202242596" style="zoom:30%;" />
 
-## other
+## retrieve evidence to LLM
 
 ### **REALM** 增强开始 ICML2020 google
 
@@ -182,6 +221,7 @@ Generalization through Memorization: Nearest Neighbor Language Models
    - **pre-training**：采用和BERT一致的MLM的策略进行建模，因此模型需要预测每个被MASK的内容。进行mlm预测前会先通过检索模型检索出相关的文档。
    - **fine-tuning：** 这里解决的Open-QA任务，模型同样先从corpus中检索出相关的文档，利用检索结果完成open-qa任务。
    
+
 ![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/201f84ff-7638-486c-9a22-486117a7ea2f)
 
 
@@ -226,17 +266,23 @@ Generalization through Memorization: Nearest Neighbor Language Models
 
    - 认为**将language information和world knowledge分开很重要**（填空需要的东西，有的仅仅依靠于语言信息就可以填出来），用语言模型编码language information很合理，但是对于factual和world-knowledge information来说效率很低。 ===> 在LM中引入retrieval method
 
-    ![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/4b795796-b823-4b63-841b-a3d7877d14c7)
+    <img src="https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/4b795796-b823-4b63-841b-a3d7877d14c7" alt="image" style="zoom:50%;" />
+
+
+
+
+
+
 
 
 2. **retrieval database**：k-v存储，k是bert编码的sent emb，v有2个部分：（1）neighbour，计算出key的文本；（2）completion，原始文本的续写。
 
-   ![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/3cf2a83a-bc6e-42fe-8178-fc2a1aaa2f69)
+   <img src="https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/3cf2a83a-bc6e-42fe-8178-fc2a1aaa2f69" alt="image" style="zoom:50%;" />
 
 
 3. **The Database Lookup**：
 
-   ![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/19823af8-016c-4546-8898-3299cb425011)
+   <img src="https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/19823af8-016c-4546-8898-3299cb425011" alt="image" style="zoom:50%;" />
 
 
 4. **RETRO Architecture**：
@@ -244,7 +290,7 @@ Generalization through Memorization: Nearest Neighbor Language Models
    - **encoder**：检索到的neighbors，作为输入，编码得到keys和values，送往decoder。
    - **decoder包含两类**：**Standard decoder block** (ATTN + FFNN)；**RETRO decoder block** (ATTN + Chunked cross attention (CCA) + FFNN)；从第9个块开始，每3个块遇到一个retro decoder block，所以第 9、12、15…32 层是 RETRO 块。
 
-   ![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/7cb47da3-bfe8-4673-acdd-fc207048f439)
+   <img src="https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/7cb47da3-bfe8-4673-acdd-fc207048f439" alt="image" style="zoom:50%;" />
 
 
    - decoder的流程
@@ -258,38 +304,15 @@ Generalization through Memorization: Nearest Neighbor Language Models
    - 注，块 $C_u$ 中的last token是第一个能访问该块检索到的内容 $E_u$ 的token，保证了likelihood中的autoregressive性。
    - 在 $H_u^+$ 和 $E_u$ （块$C_u$ 检索回来的embs）之间计算cross- attention，将得到的emb再替换回去。
 
-![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/2f88a4f8-fcc3-45cc-841c-3d6b78d972b5)
+<img src="https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/2f88a4f8-fcc3-45cc-841c-3d6b78d972b5" alt="image" style="zoom:50%;" />
 
-![image](https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/78489799-e187-4c7e-8a9e-09096f565f95)
+<img src="https://github.com/sunxiaojie99/retrieval-augmented-generation/assets/41667783/78489799-e187-4c7e-8a9e-09096f565f95" alt="image" style="zoom:50%;" />
 
 
 **likelihood 的定义也是 autoregressive 的** : the probability of the 𝑖-th token of the 𝑢-th chunk $x_{(u-1)m+i}$ , only depends on previously seen tokens  $(x_j)_{j<(u-1)m+i}$ and on the data retrieved from the previous chunks $(RET_D(C_{u'}))_{u'<u}$
 
 
-### REPLUG 2023 meta
 
-[Retrieval-Augmented Black-Box Language Models, 2023](https://blog.csdn.net/qq_52852138/article/details/130775281) 
-
-1. 动机：
-
-   - 将语言模型视作黑盒，只需要将检索到的文档拼到原有输入前面，不需要更新大模型参数。在该架构中，通过更新检索器来提升性能。
-
-2. REPLUG (inference) 做法：
-
-   - 给定查询x，先用检索器检索出top-k个文档集合 D'
-   - 将每个文档和x拼接，并行送给大模型
-   - 预测下一个词y的概率由加权平均决定，$\lambda(d,x)$ 是检索器打分在D‘上softmax后的结果。 
-
-   $$
-   p(y|x,D')=\sum_{d\in D'} p(y|d \circ x) \cdot \lambda(d,x)
-   $$
-
-3. REPLUG LSR: 用语言模型反馈的监督信号，调整检索器。（一个文档如果对大模型越有帮助，越应该被检索回来）
-
-   - 给定q，还有检索到的top-k个文档，对2个分布计算kl散度。最小化损失函数来优化检索器，LM保持不动。
-   - 第一个分布：检索器对这k个文档的打分，过softmax
-   - 第二个分布，生成器对这k个文档的打分，即，输入d和x，生成ground truth y的概率，同样过softmax
-   - 注：因为检索器参数在训练过程中更新，参数更新后document embedding会变化，因此**每隔T步就重新算一次document embedding**，并重复上述过程。
 
 
 
